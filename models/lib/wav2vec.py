@@ -88,15 +88,8 @@ class Wav2Vec2Model(Wav2Vec2Model):
 
         hidden_states = self.feature_extractor(input_values)
         hidden_states = hidden_states.transpose(1, 2)
-
-        if dataset == "BIWI":
-            # cut audio feature
-            if hidden_states.shape[1]%2 != 0:
-                hidden_states = hidden_states[:, :-1]
-            if frame_num and hidden_states.shape[1]>frame_num*2:
-                hidden_states = hidden_states[:, :frame_num*2]
-        elif dataset == "vocaset":
-            hidden_states = linear_interpolation(hidden_states, 50, 30,output_len=frame_num)
+        
+        hidden_states = linear_interpolation(hidden_states, 48, 30,output_len=frame_num)
      
         if attention_mask is not None:
             output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
@@ -108,7 +101,7 @@ class Wav2Vec2Model(Wav2Vec2Model):
             ] = 1
             attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
 
-        hidden_states = self.feature_projection(hidden_states)
+        hidden_states = self.feature_projection(hidden_states)[0]
 
         if self.config.apply_spec_augment and self.training:
             batch_size, sequence_length, hidden_size = hidden_states.size()

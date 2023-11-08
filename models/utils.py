@@ -34,7 +34,7 @@ def enc_dec_mask(device, dataset, T, S):
     if dataset == "BIWI":
         for i in range(T):
             mask[i, i*2:i*2+2] = 0
-    elif dataset == "vocaset":
+    else:
         for i in range(T):
             mask[i, i] = 0
     return (mask==1).to(device=device)

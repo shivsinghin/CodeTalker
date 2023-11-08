@@ -1,0 +1,3 @@
+mkdir vox
+wget -O vox/stage1.pth.tar https://api.wandb.ai/files/yatek/Codetalker/q3xuo3pd/vox/vox_stage1.pth.tar?_gl=1*18i22jh*_ga*MTMwMjc1OTk5NC4xNjk0MDg0MzE5*_ga_JH1SJHJQXJ*MTY5NDA5OTA1NC4zLjAuMTY5NDA5OTA1NC42MC4wLjA.
+wget -O vox/stage2.pth.tar https://api.wandb.ai/files/yatek/Codetalker/q3xuo3pd/vox/vox_stage2.pth.tar?_gl=1*18i22jh*_ga*MTMwMjc1OTk5NC4xNjk0MDg0MzE5*_ga_JH1SJHJQXJ*MTY5NDA5OTA1NC4zLjAuMTY5NDA5OTA1NC42MC4wLjA.

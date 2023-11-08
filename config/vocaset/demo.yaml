@@ -7,7 +7,7 @@ DATA:
   train_subjects: FaceTalk_170728_03272_TA FaceTalk_170904_00128_TA FaceTalk_170725_00137_TA FaceTalk_170915_00223_TA FaceTalk_170811_03274_TA FaceTalk_170913_03279_TA FaceTalk_170904_03276_TA FaceTalk_170912_03278_TA
 
 NETWORK:
-  arch: stage2
+  arch: audio2vertices
   in_dim: 15069
   hidden_size: 1024
   num_hidden_layers: 6
@@ -17,7 +17,7 @@ NETWORK:
   quant_factor: 0
   face_quan_num: 16
   neg: 0.2
-  autoencoder: stage1_vocaset
+  autoencoder: vertices_encoder
   INaffine: False
   style_emb_method: nnemb # onehot or nnemb
 
@@ -30,17 +30,18 @@ PREDICTOR:
   vertice_dim: 15069
   device: cuda
   period: 30
-  vqvae_pretrained_path: vocaset/vocaset_stage1.pth.tar
+  vqvae_pretrained_path: vocaset/stage1.pth.tar
   wav2vec2model_path: facebook/wav2vec2-base-960h
   teacher_forcing: True
   num_layers: 6
   n_head: 4 # not used
+# FaceTalk_170904_00128_TA 'FaceTalk_170811_03275_TA FaceTalk_170728_03272_TA FaceTalk_170725_00137_TA FaceTalk_170811_03274_TA FaceTalk_170912_03278_TA FaceTalk_170809_00138_TA FaceTalk_170908_03277_TA FaceTalk_170731_00024_TA FaceTalk_170913_03279_TA FaceTalk_170915_00223_TA FaceTalk_170904_03276_TA
 
 DEMO:
-  model_path: vocaset/vocaset_stage2.pth.tar
+  model_path: vocaset/stage2.pth.tar
   condition: FaceTalk_170725_00137_TA   # should be within train_subjects: FaceTalk_170728_03272_TA FaceTalk_170904_00128_TA FaceTalk_170725_00137_TA FaceTalk_170915_00223_TA FaceTalk_170811_03274_TA FaceTalk_170913_03279_TA FaceTalk_170904_03276_TA FaceTalk_170912_03278_TA
-  subject: FaceTalk_170809_00138_TA
-  demo_wav_path: demo/wav/man.wav
+  subject: FaceTalk_170811_03275_TA
+  demo_wav_path: demo/wav/main0.wav
   demo_output_path: demo/output/
   demo_npy_save_folder: demo/npy/
   fps: 30

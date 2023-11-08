@@ -1,0 +1,44 @@
+DATA:
+  dataset: vox
+  data_root: .
+  wav_path: wav
+  vertices_path: vertices_npy
+
+NETWORK:
+  arch: audio2vertices
+  in_dim: 15069
+  hidden_size: 1024
+  num_hidden_layers: 6
+  num_attention_heads: 8
+  batch_size: 1
+  intermediate_size: 1536
+  window_size: 1
+  quant_factor: 0
+  face_quan_num: 8
+  neg: 0.2
+  autoencoder: vertices_encoder
+  INaffine: False
+  style_emb_method: nnemb # onehot or nnemb
+
+VQuantizer:
+  n_embed: 728
+  zquant_dim: 128
+
+PREDICTOR:
+  feature_dim: 1024
+  vertice_dim: 15069
+  device: cuda
+  period: 30
+  vqvae_pretrained_path: vox/stage1.pth.tar
+  wav2vec2model_path: facebook/wav2vec2-base-960h
+  teacher_forcing: True
+  num_layers: 6
+  n_head: 4 # not used
+
+DEMO:
+  model_path: vox/stage2.pth.tar
+  demo_wav_path: demo/wav/main0.wav
+  demo_output_path: demo/output/
+  demo_npy_save_folder: demo/npy/
+  fps: 30
+  background_black: True # chose the background color of your rendered video

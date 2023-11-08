@@ -5,11 +5,10 @@ import torch
 import numpy as np
 import librosa
 import pickle
-
-from transformers import Wav2Vec2Processor
+import time
 from base.utilities import get_parser
 from models import get_model
-from base.baseTrainer import load_state_dict
+from transformers import Wav2Vec2Processor
 
 cv2.ocl.setUseOpenCL(False)
 cv2.setNumThreads(0)
@@ -18,20 +17,19 @@ cfg = get_parser()
 
 import tempfile
 from subprocess import call
-os.environ['PYOPENGL_PLATFORM'] = 'osmesa' #egl
+if 'DISPLAY' not in os.environ:
+    os.environ['PYOPENGL_PLATFORM'] = 'egl' #egl
+
 import pyrender
 import trimesh
 from psbody.mesh import Mesh
+# from dataset import convert_to_vertices
+# from vertices2flame import FlameInverter
 
 
 # The implementation of rendering is borrowed from VOCA: https://github.com/TimoBolkart/voca/blob/master/utils/rendering.py
 def render_mesh_helper(args,mesh, t_center, rot=np.zeros(3), tex_img=None, z_offset=0):
-    if args.dataset == "BIWI":
-        camera_params = {'c': np.array([400, 400]),
-                         'k': np.array([-0.19816071, 0.92822711, 0, 0, 0]),
-                         'f': np.array([4754.97941935 / 8, 4754.97941935 / 8])}
-    elif args.dataset == "vocaset":
-        camera_params = {'c': np.array([400, 400]),
+    camera_params = {'c': np.array([400, 400]),
                          'k': np.array([-0.19816071, 0.92822711, 0, 0, 0]),
                          'f': np.array([4754.97941935 / 2, 4754.97941935 / 2])}
 
@@ -108,82 +106,90 @@ def render_mesh_helper(args,mesh, t_center, rot=np.zeros(3), tex_img=None, z_off
 def main():
     global cfg
     model = get_model(cfg)
-    # if torch.cuda.is_available():
     model = model.cuda()
-
+    # inverter = FlameInverter(args=cfg, from_pretrained=True)
+    # inverter = inverter.cuda()
     if os.path.isfile(cfg.model_path):
         print("=> loading checkpoint '{}'".format(cfg.model_path))
         checkpoint = torch.load(cfg.model_path, map_location=lambda storage, loc: storage.cpu())
-        load_state_dict(model, checkpoint['state_dict'], strict=False)
+        model.load_state_dict(checkpoint['state_dict'], strict=False)
+
         print("=> loaded checkpoint '{}'".format(cfg.model_path))
     else:
         raise RuntimeError("=> no checkpoint flound at '{}'".format(cfg.model_path))
+    
 
+    inverter.eval()
     model.eval()
     save_folder = cfg.demo_npy_save_folder
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
 
-    condition = cfg.condition
-    subject = cfg.subject
-    test(model, cfg.demo_wav_path, save_folder, condition, subject)
+    if cfg.dataset == 'vocaset':
+        condition = cfg.condition
+        subject = cfg.subject
+    else:
+        condition = None
+        subject = None
+    test(model,inverter, cfg.demo_wav_path, save_folder, condition, subject, dataset=cfg.dataset)
 
 
-def test(model, wav_file, save_folder, condition, subject):
+def test(model,inverter, wav_file, save_folder, condition, subject, dataset):
     # generate the facial animation (.npy file) for the audio 
     print('Generating facial animation for {}...'.format(wav_file))
     
-    template_file = os.path.join(cfg.data_root, cfg.template_file)
-    with open(template_file, 'rb') as fin:
-        templates = pickle.load(fin,encoding='latin1')
-    
+    # Template
+    if dataset == 'vocaset':
+        template_file = 'vocaset/templates.pkl'
+        with open(template_file, 'rb') as fin:
+            templates = pickle.load(fin,encoding='latin1')
 
-    train_subjects_list = [i for i in cfg.train_subjects.split(" ")]
-    one_hot_labels = np.eye(len(train_subjects_list))
-    iter = train_subjects_list.index(condition)
-    one_hot = one_hot_labels[iter]
-    one_hot = np.reshape(one_hot,(-1,one_hot.shape[0]))
-    one_hot = torch.FloatTensor(one_hot).to(device='cuda')
-
-    temp = templates[subject]
-    template = temp.reshape((-1))
-    template = np.reshape(template,(-1,template.shape[0]))
-    template = torch.FloatTensor(template).to(device='cuda')
-
+        temp = templates[subject]
+        template = temp.reshape((-1))
+        template = np.reshape(template,(-1,template.shape[0]))
+        template = torch.FloatTensor(template).to(device='cuda')
+    else:
+        # Base Flame template
+        import open3d as o3d
+        pcd = o3d.io.read_point_cloud("./dataset/model/FLAME_sample.ply")
+        template = np.asarray(pcd.points).reshape((-1))
+        template = torch.from_numpy(template).float().unsqueeze(0).to(device='cuda')
 
     test_name = os.path.basename(wav_file).split(".")[0]
+
     if not os.path.exists(os.path.join(save_folder,test_name)):
         os.makedirs(os.path.join(save_folder,test_name))
-    predicted_vertices_path = os.path.join(save_folder, test_name, 'condition_'+condition+'_subject_'+subject+'.npy')
+    
+    if dataset == 'vocaset':
+        predicted_vertices_path = os.path.join(save_folder, test_name, 'condition_'+condition+'_subject_'+subject+'.npy')
+    else:
+        predicted_vertices_path = os.path.join(save_folder, test_name, '.npy')
+
+    # Load audio
     speech_array, _ = librosa.load(wav_file, sr=16000)
     processor = Wav2Vec2Processor.from_pretrained(cfg.wav2vec2model_path)
+
     audio_feature = np.squeeze(processor(speech_array,sampling_rate=16000).input_values)
     audio_feature = np.reshape(audio_feature,(-1,audio_feature.shape[0]))
     audio_feature = torch.FloatTensor(audio_feature).to(device='cuda')
 
-
-
     with torch.no_grad():
-        prediction = model.predict(audio_feature, template, one_hot)
+        prediction = model.predict(audio_feature, template)
+        # pose, exp = inverter(prediction)
+        # prediction = convert_to_vertices(exp,pose)
         prediction = prediction.squeeze() # (seq_len, V*3)
         np.save(predicted_vertices_path, prediction.detach().cpu().numpy())
         print(f'Save facial animation in {predicted_vertices_path}')
 
-
     ######################################################################################
     ##### render the npy file
 
-    if cfg.dataset == "BIWI":
-        template_file = os.path.join(cfg.data_root, "BIWI.ply")
-    elif cfg.dataset == "vocaset":
-        template_file = os.path.join(cfg.data_root, "FLAME_sample.ply")
-         
+
     print("rendering: ", test_name)
-                 
+    template_file = 'dataset/model/FLAME_sample.ply'
     template = Mesh(filename=template_file)
     predicted_vertices = np.load(predicted_vertices_path)
     predicted_vertices = np.reshape(predicted_vertices,(-1,cfg.vertice_dim//3,3))
-
     output_path = cfg.demo_output_path
     if not os.path.exists(output_path):
         os.makedirs(output_path)
@@ -193,7 +199,7 @@ def test(model, wav_file, save_folder, condition, subject):
     
     writer = cv2.VideoWriter(tmp_video_file.name, cv2.VideoWriter_fourcc(*'mp4v'), cfg.fps, (800, 800), True)
     center = np.mean(predicted_vertices[0], axis=0)
-
+    
     for i_frame in range(num_frames):
         render_mesh = Mesh(predicted_vertices[i_frame], template.f)
         pred_img = render_mesh_helper(cfg,render_mesh, center)
@@ -201,14 +207,19 @@ def test(model, wav_file, save_folder, condition, subject):
         writer.write(pred_img)
 
     writer.release()
-    file_name = test_name+"_"+cfg.subject+"_condition_"+cfg.condition
+    if dataset == 'vocaset':
+        file_name = test_name+'_condition_'+condition+'_subject_'+subject
+    else:
+        file_name = test_name
 
     video_fname = os.path.join(output_path, file_name+'.mp4')
     cmd = ('ffmpeg' + ' -i {0} -pix_fmt yuv420p -qscale 0 {1}'.format(
        tmp_video_file.name, video_fname)).split()
     call(cmd)
 
-    cmd = ('ffmpeg' + ' -i {0} -i {1} -vcodec h264 -ac 2 -channel_layout stereo -qscale 0 {2}'.format(
+    print("Adding audio")
+
+    cmd = ('ffmpeg' + ' -i {0} -i {1}  -channel_layout stereo -qscale 0 {2}'.format(
        wav_file, video_fname, video_fname.replace('.mp4', '_audio.mp4'))).split()
     call(cmd)
 

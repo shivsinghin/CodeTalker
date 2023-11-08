@@ -7,33 +7,33 @@ from transformers import Wav2Vec2Processor
 import librosa
 from collections import defaultdict
 from torch.utils import data 
+from encodec import EncodecModel
+from .dataset import get_dataloader_ted, get_dataloader_vox
+
 
 class Dataset(data.Dataset):
     """Custom data.Dataset compatible with data.DataLoader."""
-    def __init__(self, data,subjects_dict,data_type="train",read_audio=False):
+    def __init__(self, data,subjects_dict,data_type="train",read_audio=False, file_name=False):
         self.data = data
         self.len = len(self.data)
         self.subjects_dict = subjects_dict
         self.data_type = data_type
         self.one_hot_labels = np.eye(len(subjects_dict["train"]))
         self.read_audio = read_audio
+        self.file_name = file_name
 
     def __getitem__(self, index):
         """Returns one data pair (source and target)."""
         # seq_len, fea_dim
-        file_name = self.data[index]["name"]
         audio = self.data[index]["audio"]
         vertice = self.data[index]["vertice"]
         template = self.data[index]["template"]
-        if self.data_type == "train":
-            subject = "_".join(file_name.split("_")[:-1])
-            one_hot = self.one_hot_labels[self.subjects_dict["train"].index(subject)]
-        else:
-            one_hot = self.one_hot_labels
         if self.read_audio:
-            return torch.FloatTensor(audio),torch.FloatTensor(vertice), torch.FloatTensor(template), torch.FloatTensor(one_hot), file_name
+            if self.file_name:
+                return torch.FloatTensor(audio),torch.FloatTensor(vertice), torch.FloatTensor(template), self.data[index]["name"]
+            return torch.FloatTensor(audio),torch.FloatTensor(vertice), torch.FloatTensor(template)
         else:
-            return torch.FloatTensor(vertice), torch.FloatTensor(template), torch.FloatTensor(one_hot), file_name
+            return torch.FloatTensor(vertice), torch.FloatTensor(template)
 
     def __len__(self):
         return self.len
@@ -65,7 +65,7 @@ def read_data(args):
                 data[key]["audio"] = input_values if args.read_audio else None
                 subject_id = "_".join(key.split("_")[:-1])
                 temp = templates[subject_id]
-                data[key]["name"] = f
+                data[key]["name"] = wav_path if args.read_audio else None
                 data[key]["template"] = temp.reshape((-1)) 
                 vertice_path = os.path.join(vertices_path,f.replace("wav", "npy"))
                 if not os.path.exists(vertice_path):
@@ -101,13 +101,19 @@ def read_data(args):
     return train_data, valid_data, test_data, subjects_dict
 
 def get_dataloaders(args):
+    ## get dataloaders
+    if args.dataset == "ted":
+        return get_dataloader_ted(args)
+    elif args.dataset == "vox":
+        return get_dataloader_vox(args)
+
     dataset = {}
     train_data, valid_data, test_data, subjects_dict = read_data(args)
-    train_data = Dataset(train_data,subjects_dict,"train",args.read_audio)
+    train_data = Dataset(train_data,subjects_dict,"train",args.read_audio, args.visualize)
     dataset["train"] = data.DataLoader(dataset=train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.workers)
-    valid_data = Dataset(valid_data,subjects_dict,"val",args.read_audio)
+    valid_data = Dataset(valid_data,subjects_dict,"val",args.read_audio, args.visualize)
     dataset["valid"] = data.DataLoader(dataset=valid_data, batch_size=1, shuffle=False, num_workers=args.workers)
-    test_data = Dataset(test_data,subjects_dict,"test",args.read_audio)
+    test_data = Dataset(test_data,subjects_dict,"test",args.read_audio, args.visualize)
     dataset["test"] = data.DataLoader(dataset=test_data, batch_size=1, shuffle=False, num_workers=args.workers)
     return dataset
 

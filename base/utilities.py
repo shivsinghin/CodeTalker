@@ -60,7 +60,3 @@ def check_makedirs(dir_name):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-
-def main_process(args):
-    return not args.multiprocessing_distributed or (
-            args.multiprocessing_distributed and args.rank % args.ngpus_per_node == 0)

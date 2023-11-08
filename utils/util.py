@@ -82,3 +82,45 @@ def cal_padding(L, window_size):
 def requires_grad(model, flag=True):
     for p in model.parameters():
         p.requires_grad = flag
+
+
+def get_video_fps(video_file):
+    cap = cv2.VideoCapture(video_file)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    return fps
+
+
+def get_video_length(video_file):
+    cap = cv2.VideoCapture(video_file)
+    length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    return length
+
+
+def read_video(video_file):
+        # Read video file and return the frames as a tensor
+        try:
+            frames = []
+            cap = cv2.VideoCapture(video_file)
+            while(cap.isOpened()):
+                ret, frame = cap.read()
+                if ret == True:
+                    frame = cv2.resize(frame, (256, 256))
+                    frames.append(frame)
+                else:
+                    break
+            cap.release()
+            return torch.from_numpy(np.array(frames)).float()
+        except:
+            print(f"Error reading video file {video_file}")
+            return None
+
+
+def save_video(video_file, frames, fps=30):
+        # Save tensor of frames as a video file
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(video_file, fourcc, fps, (256, 256))
+        frames = frames.astype(np.uint8).squeeze()
+        # Convert to List of numpy arrays
+        for frame in frames:
+            out.write(frame)
+        out.release()
